@@ -1,39 +1,55 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry';
-import { FontLoader } from 'three/examples/jsm/loaders/FontLoader';
+import { FontLoader, type Font } from 'three/examples/jsm/loaders/FontLoader';
+
+interface BoxDimensions {
+  width: number;
+  height: number;
+  depth: number;
+}
 
 class ParticleInBox {
-  constructor() {
-    this.scene = null;
-    this.camera = null;
-    this.renderer = null;
-    this.box = null;
-    this.particle = null;
-    this.controls = null;
-    this.energyLevel = 1;
-    this.boxDimensions = { width: 2, height: 2, depth: 2 };
+  private scene: THREE.Scene | null = null;
+  private camera: THREE.PerspectiveCamera | null = null;
+  private renderer: THREE.WebGLRenderer | null = null;
+  private box: THREE.LineSegments | null = null;
+  private particle: THREE.Mesh | null = null;
+  private controls: OrbitControls | null = null;
+  private energyLevel: number = 1;
+  private boxDimensions: BoxDimensions = { width: 2, height: 2, depth: 2 };
+  
+  private trailPoints: THREE.Vector3[] = [];
+  private maxTrailLength: number = 100;
+  private coordinatesDisplay: HTMLElement;
+  private font: Font | null = null;
+  private trailGeometry: THREE.BufferGeometry;
+  private trail: THREE.Line;
+  private xLabel: THREE.Mesh | null = null;
+  private yLabel: THREE.Mesh | null = null;
+  private zLabel: THREE.Mesh | null = null;
 
-    this.trailPoints = [];
-    this.maxTrailLength = 100;
-    this.coordinatesDisplay = document.getElementById('coordinates');
+  constructor() {
+    this.coordinatesDisplay = document.getElementById('coordinates')!;
+    this.trailGeometry = new THREE.BufferGeometry();
+    this.trail = new THREE.Line(this.trailGeometry, new THREE.LineBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.5 }));
+    
     this.showModal(); // Show modal on load
     this.init();
     this.setupEventListeners();
     this.animate();
-    this.font = null;
     this.loadFont();
   }
 
-  loadFont() {
+  private loadFont(): void {
     const loader = new FontLoader();
-    loader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', (font) => {
+    loader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', (font: Font) => {
       this.font = font;
       this.createAxisLabels();
     });
   }
 
-  init() {
+  private init(): void {
     // Create scene
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x111111);
@@ -46,7 +62,7 @@ class ParticleInBox {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(window.devicePixelRatio);
-    document.getElementById('app').appendChild(this.renderer.domElement);
+    document.getElementById('app')!.appendChild(this.renderer.domElement);
 
     // Create transparent box with glowing edges
     const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
@@ -75,12 +91,12 @@ class ParticleInBox {
     this.controls.enableZoom = true;
   }
 
-  createAxisLabels() {
-    if (!this.font) return;
+  private createAxisLabels(): void {
+    if (!this.font || !this.scene) return;
 
-    const createLabel = (text, color, position, rotation) => {
+    const createLabel = (text: string, color: number, position: THREE.Vector3, rotation: THREE.Euler): THREE.Mesh => {
       const geometry = new TextGeometry(text, {
-        font: this.font,
+        font: this.font!,
         size: 0.2,
         height: 0.02,
       });
@@ -88,7 +104,7 @@ class ParticleInBox {
       const label = new THREE.Mesh(geometry, material);
       label.position.copy(position);
       label.rotation.copy(rotation);
-      this.scene.add(label);
+      this.scene!.add(label);
       return label;
     };
 
@@ -99,34 +115,53 @@ class ParticleInBox {
     this.zLabel = createLabel('Z', 0x0000ff, new THREE.Vector3(0, 0, maxDimension / 2 + 0.3), new THREE.Euler(0, Math.PI / 2, 0));
   }
 
-  setupEventListeners() {
+  private setupEventListeners(): void {
     window.addEventListener('resize', () => this.onWindowResize(), false);
-    document.getElementById('energyLevel').addEventListener('change', (e) => this.updateEnergyLevel(e));
-    document.getElementById('boxWidth').addEventListener('input', () => this.updateBoxDimensions());
-    document.getElementById('boxHeight').addEventListener('input', () => this.updateBoxDimensions());
-    document.getElementById('boxDepth').addEventListener('input', () => this.updateBoxDimensions());
-    document.getElementById('infoButton').addEventListener('click', () => this.showModal());
-    document.getElementById('closeModal').addEventListener('click', () => this.hideModal());
-    window.addEventListener('click', (event) => {
+    
+    const energyLevelInput = document.getElementById('energyLevel') as HTMLInputElement;
+    energyLevelInput.addEventListener('change', (e) => this.updateEnergyLevel(e));
+    
+    document.getElementById('boxWidth')!.addEventListener('input', () => this.updateBoxDimensions());
+    document.getElementById('boxHeight')!.addEventListener('input', () => this.updateBoxDimensions());
+    document.getElementById('boxDepth')!.addEventListener('input', () => this.updateBoxDimensions());
+    document.getElementById('infoButton')!.addEventListener('click', () => this.showModal());
+    document.getElementById('closeModal')!.addEventListener('click', () => this.hideModal());
+    
+    window.addEventListener('click', (event: MouseEvent) => {
       if (event.target === document.getElementById('modal')) {
         this.hideModal();
       }
     });
   }
 
-  showModal() { document.getElementById('modal').style.display = 'block'; }
+  private showModal(): void { 
+    const modal = document.getElementById('modal')!;
+    modal.style.display = 'block'; 
+  }
 
-  hideModal() { document.getElementById('modal').style.display = 'none'; }
+  private hideModal(): void { 
+    const modal = document.getElementById('modal')!;
+    modal.style.display = 'none'; 
+  }
 
-  updateEnergyLevel(event) { this.energyLevel = parseInt(event.target.value); }
+  private updateEnergyLevel(event: Event): void { 
+    const target = event.target as HTMLInputElement;
+    this.energyLevel = parseInt(target.value); 
+  }
 
-  updateBoxDimensions() {
-    this.boxDimensions.width = parseFloat(document.getElementById('boxWidth').value);
-    this.boxDimensions.height = parseFloat(document.getElementById('boxHeight').value);
-    this.boxDimensions.depth = parseFloat(document.getElementById('boxDepth').value);
+  private updateBoxDimensions(): void {
+    const boxWidthInput = document.getElementById('boxWidth') as HTMLInputElement;
+    const boxHeightInput = document.getElementById('boxHeight') as HTMLInputElement;
+    const boxDepthInput = document.getElementById('boxDepth') as HTMLInputElement;
+    
+    this.boxDimensions.width = parseFloat(boxWidthInput.value);
+    this.boxDimensions.height = parseFloat(boxHeightInput.value);
+    this.boxDimensions.depth = parseFloat(boxDepthInput.value);
 
     // Update box geometry
-    this.box.scale.set(this.boxDimensions.width, this.boxDimensions.height, this.boxDimensions.depth);
+    if (this.box) {
+      this.box.scale.set(this.boxDimensions.width, this.boxDimensions.height, this.boxDimensions.depth);
+    }
 
     // Update label positions
     if (this.xLabel && this.yLabel && this.zLabel) {
@@ -137,7 +172,7 @@ class ParticleInBox {
     }
   }
 
-  getQuantumPosition(t) {
+  private getQuantumPosition(t: number): THREE.Vector3 {
     const { width, height, depth } = this.boxDimensions;
     const nx = this.energyLevel;
     const ny = this.energyLevel;
@@ -150,7 +185,9 @@ class ParticleInBox {
     return new THREE.Vector3(x, y, z).multiplyScalar(0.5);
   }
 
-  updateParticle(time) {
+  private updateParticle(time: number): void {
+    if (!this.particle) return;
+    
     const position = this.getQuantumPosition(time);
     this.particle.position.copy(position);
 
@@ -160,7 +197,7 @@ class ParticleInBox {
       Math.abs(position.y / this.boxDimensions.height),
       Math.abs(position.z / this.boxDimensions.depth)
     );
-    this.particle.material.color = color;
+    (this.particle.material as THREE.MeshBasicMaterial).color = color;
 
     // Update trail
     this.trailPoints.push(position.clone());
@@ -173,20 +210,32 @@ class ParticleInBox {
     this.updateCoordinatesDisplay(position);
   }
 
-  updateCoordinatesDisplay(position) { this.coordinatesDisplay.textContent = `X: ${position.x.toFixed(3)} | Y: ${position.y.toFixed(3)} | Z: ${position.z.toFixed(3)}`; }
+  private updateCoordinatesDisplay(position: THREE.Vector3): void { 
+    this.coordinatesDisplay.textContent = `X: ${position.x.toFixed(3)} | Y: ${position.y.toFixed(3)} | Z: ${position.z.toFixed(3)}`; 
+  }
 
-  animate() {
+  private animate(): void {
     requestAnimationFrame(() => this.animate());
 
     const time = Date.now() * 0.001;
     this.updateParticle(time);
-    this.particle.position.copy(this.getQuantumPosition(time));
+    
+    if (this.particle) {
+      this.particle.position.copy(this.getQuantumPosition(time));
+    }
 
-    this.controls.update();
-    this.renderer.render(this.scene, this.camera);
+    if (this.controls) {
+      this.controls.update();
+    }
+    
+    if (this.renderer && this.scene && this.camera) {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 
-  onWindowResize() {
+  private onWindowResize(): void {
+    if (!this.camera || !this.renderer) return;
+    
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
