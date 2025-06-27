@@ -138,18 +138,6 @@ class SimpleElectronBox {
     document.addEventListener('mouseup', () => {
       isMouseDown = false;
     });
-    
-    // Apply smooth camera rotation
-    const rotationInterval = setInterval(() => {
-      currentRotationX += (targetRotationX - currentRotationX) * 0.1;
-      currentRotationY += (targetRotationY - currentRotationY) * 0.1;
-      
-      const radius = 6;
-      this.camera.position.x = Math.cos(currentRotationY) * Math.cos(currentRotationX) * radius;
-      this.camera.position.y = Math.sin(currentRotationX) * radius;
-      this.camera.position.z = Math.sin(currentRotationY) * Math.cos(currentRotationX) * radius;
-      this.camera.lookAt(0, 0, 0);
-    }, 16);
   }
   
   private setupControls(): void {
